@@ -1,4 +1,4 @@
-library multiselect_dropdown_flutter;
+library;
 
 // for public use
 export 'src/models/multi_select_option.dart';

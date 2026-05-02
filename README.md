@@ -1,39 +1,20 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# Flutter Multiselect Dropdown
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+A highly customizable, searchable multiselect dropdown for Flutter. Effortlessly handle multiple selections with support for generic types, "Select All" logic, and deep UI customization.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## 🚀 Features
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+*   **Generic Type Support**: Use with Strings, Integers, or custom Data Models.
+*   **Searchable**: Built-in search bar to filter through long lists.
+*   **Selection Logic**: "Select All" and "Clear All" functionality included.
+*   **Validation**: Set a `maxSelection` limit to restrict user choices.
+*   **Fully Customizable**: Change colors, text styles, icons, and chip decorations to match your brand.
+*   **Responsive UI**: Items are displayed as interactive chips that can be removed individually.
 
-## Features
+## 📦 Installation
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+Add this to your `pubspec.yaml`:
 
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
-```dart
-const like = 'sample';
-```
-
-## Additional information
-
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+```yaml
+dependencies:
+  flutter_multiselect_dropdown: ^1.0.0

@@ -17,4 +17,4 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_multiselect_dropdown: ^1.0.0
+  multiselect_dropdown_flutter: ^1.0.0

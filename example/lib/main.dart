@@ -14,7 +14,7 @@ class PackagePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Multiselect Dropdown Example"),centerTitle: true,backgroundColor: Colors.blueAccent,),
+      appBar: AppBar(title: const Text("Multiselect Dropdown Example"),centerTitle: true,backgroundColor: Colors.orangeAccent,),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -59,9 +59,10 @@ class PackagePreview extends StatelessWidget {
               ),
               inputFieldDecoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: Colors.blueAccent.withValues(alpha: 0.5),
+                color: Colors.white,
                 border: Border.all(width: 2)
               ),
+              chipColor: Colors.orangeAccent,
               items: [
                 MultiSelectOption(value: "apple", label: "Apple"),
                 MultiSelectOption(value: "banana", label: "Banana"),

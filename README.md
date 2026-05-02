@@ -1,5 +1,7 @@
 # Flutter Multiselect Dropdown
 
+![Dropdown Preview](https://github.com/mrityudata/flutter_multiselect_plus/blob/main/screenshots/colored_chips.png)
+
 A highly customizable, searchable multiselect dropdown for Flutter. Effortlessly handle multiple selections with support for generic types, "Select All" logic, and deep UI customization.
 
 ## 🚀 Features
@@ -17,4 +19,4 @@ Add this to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  multiselect_dropdown_flutter: ^1.0.0
+  flutter_multiselect_plus: ^1.0.0

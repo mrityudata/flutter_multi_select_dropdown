@@ -1,9 +1,9 @@
-name: multiselect_dropdown_flutter
+name: flutter_multiselect_plus
 description: "A highly customizable multiselect dropdown for Flutter with search, select all, and custom styling."
 version: 1.0.0
 
-homepage: "https://github.com/mrityudata/multiselect_dropdown_flutter"
-repository: "https://github.com/mrityudata/multiselect_dropdown_flutter"
+homepage: "https://github.com/mrityudata/flutter_multiselect_plus"
+repository: "https://github.com/mrityudata/flutter_multiselect_plus"
 
 environment:
   sdk: ^3.11.4
@@ -54,3 +54,9 @@ flutter:
   #
   # For details regarding fonts in packages, see
   # https://flutter.dev/to/font-from-package
+
+screenshots:
+  - description: 'Main view showing selected items as chips.'
+    path: screenshots/colored_chips.png
+  - description: 'Dropdown dialog with search and select all functionality.'
+    path: screenshots/dropdown.png

@@ -1,4 +1,6 @@
+import 'dart:async'; // Added for Timer
 import 'package:flutter/material.dart';
+import 'package:flutter_multiselect_plus/src/widgets/drop_down_widget.dart';
 import 'models/multi_select_option.dart';
 
 /// A highly customizable Multiselect Dropdown widget for Flutter.
@@ -42,6 +44,9 @@ class MultiSelectDropdown<T> extends StatefulWidget {
   /// Color of the chip when user make selection.
   final Color? chipColor;
 
+  ///Snack bar background color
+  final Color? snackBarBackgroundColor;
+
   /// Whether to automatically sort the items alphabetically by their label.
   final bool sortByLabel;
 
@@ -60,20 +65,17 @@ class MultiSelectDropdown<T> extends StatefulWidget {
   /// Style for the [hintText].
   final TextStyle? hintTextStyle;
 
-  /// Style for the "Select All" button text.
-  final TextStyle? selectAllTextStyle;
-
-  /// Style for the "Clear All" button text.
-  final TextStyle? clearAllTextStyle;
-
-  /// Style for the [searchHintText].
-  final TextStyle? searchHintTextStyle;
-
   /// Style for the [labelText] displayed above the field.
   final TextStyle? labelTextStyle;
 
+  /// Style for the [hintText] displayed in the dropdown.
+  final TextStyle? searchHintTextStyle;
+
   /// style for the chip text
   final TextStyle? chipTextStyle;
+
+  ///style for the done text on drop down
+  final TextStyle? doneTextStyle;
 
   /// Style for the [title] of the dropdown dialog.
   final TextStyle? dropDownTitleStyle;
@@ -81,8 +83,8 @@ class MultiSelectDropdown<T> extends StatefulWidget {
   /// Style for the labels of the items inside the list.
   final TextStyle? listLabelTextStyle;
 
-  /// Style for the "Done" action button text.
-  final TextStyle? doneTextStyle;
+  /// Style for the warning snack bar of max selection.
+  final TextStyle? maxSelectionSnackBarTextStyle;
 
   /// Style for the [noResultText] message.
   final TextStyle? noResultTextStyle;
@@ -96,11 +98,32 @@ class MultiSelectDropdown<T> extends StatefulWidget {
   /// Custom icon to represent the dropdown trigger (defaults to arrow_drop_down).
   final Icon? dropDownIcon;
 
+  /// The maximum height of the dropdown menu.
+  final double dropdownHeight;
+
   /// Position of the [labelText] (Start, Center, or End).
   final CrossAxisAlignment labelTextPosition;
 
+  /// Style for the "Select All" button text.
+  final TextStyle? selectAllTextStyle;
+
+  /// Style for the "Clear All" button text.
+  final TextStyle? clearAllTextStyle;
+
   /// Internal padding for the input field.
   final EdgeInsetsGeometry? searchFieldPadding;
+
+  /// Internal padding for the input field.
+  final EdgeInsetsGeometry? selectClearAllPadding;
+
+  /// Whether the dropdown allows only a single selection.
+  final bool isSingleSelect;
+
+  /// Callback triggered when max selection limit is reached.
+  final VoidCallback? onMaxSelectionLimitReached;
+
+  ///separator widget
+  final Widget? separatorWidget;
 
   const MultiSelectDropdown({
     super.key,
@@ -114,24 +137,31 @@ class MultiSelectDropdown<T> extends StatefulWidget {
     this.labelTextPosition = CrossAxisAlignment.start,
     this.sortByLabel = true,
     this.showSearch = true,
+    this.isSingleSelect = false,
+    this.onMaxSelectionLimitReached,
     this.dropdownMenuColor,
     this.selectedItemColor,
+    this.separatorWidget,
     this.chipColor,
+    this.snackBarBackgroundColor,
     this.chipTextStyle,
+    this.searchHintTextStyle,
+    this.doneTextStyle,
     this.noSearchIconColor,
     this.maxSelection,
     this.hintTextStyle,
-    this.selectAllTextStyle,
-    this.clearAllTextStyle,
-    this.doneTextStyle,
-    this.searchHintTextStyle,
+    this.selectClearAllPadding,
     this.labelTextStyle,
     this.noResultTextStyle,
     this.dropDownTitleStyle,
     this.listLabelTextStyle,
+    this.selectAllTextStyle,
+    this.clearAllTextStyle,
+    this.maxSelectionSnackBarTextStyle,
     this.inputFieldDecoration,
     this.searchFieldDecoration,
     this.dropDownIcon,
+    this.dropdownHeight = 400,
     this.noSearchIconSize,
     this.spaceBtLabelAndField = 5,
     this.searchFieldPadding,
@@ -147,6 +177,12 @@ class _MultiSelectDropdownState<T> extends State<MultiSelectDropdown<T>> {
   late List<MultiSelectOption<T>> _allOptions;
   List<MultiSelectOption<T>> _filteredOptions = [];
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  bool _isOpen = false;
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -160,13 +196,32 @@ class _MultiSelectDropdownState<T> extends State<MultiSelectDropdown<T>> {
     _filteredOptions = _allOptions;
   }
 
+  @override
+  void didUpdateWidget(covariant MultiSelectDropdown<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items != widget.items || oldWidget.sortByLabel != widget.sortByLabel) {
+      _allOptions = List.from(widget.items);
+      if (widget.sortByLabel) {
+        _allOptions.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+      }
+      _filteredOptions = _allOptions;
+    }
+  }
+
+  @override
+  void dispose() {
+    _overlayEntry?.remove();
+    _searchController.dispose();
+    _debounce?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   /// Filters the visible options based on the user's search [query].
   void _filterSearch(String query) {
-    setState(() {
-      _filteredOptions = _allOptions
-          .where((item) => item.label.toLowerCase().contains(query.toLowerCase()))
-          .toList();
-    });
+    _filteredOptions = _allOptions
+        .where((item) => item.label.toLowerCase().contains(query.toLowerCase()))
+        .toList();
   }
 
   /// Handles the "Select All" logic.
@@ -174,170 +229,164 @@ class _MultiSelectDropdownState<T> extends State<MultiSelectDropdown<T>> {
   /// If [selected] is true, it attempts to select all items currently
   /// visible in the filtered list while respecting [maxSelection].
   void _handleSelectAll(bool? selected) {
-    setState(() {
-      if (selected == true) {
-        for (var item in _filteredOptions) {
-          if (!_selectedValues.contains(item.value)) {
-            if (widget.maxSelection == null || _selectedValues.length < widget.maxSelection!) {
-              _selectedValues.add(item.value);
-            }
+    if (selected == true) {
+      for (var item in _filteredOptions) {
+        if (!_selectedValues.contains(item.value)) {
+          if (widget.maxSelection == null || _selectedValues.length < widget.maxSelection!) {
+            _selectedValues.add(item.value);
           }
         }
-      } else {
-        for (var item in _filteredOptions) {
-          _selectedValues.remove(item.value);
-        }
       }
-      widget.onSelectionChanged(_selectedValues);
-    });
+    } else {
+      for (var item in _filteredOptions) {
+        _selectedValues.remove(item.value);
+      }
+    }
+    widget.onSelectionChanged(_selectedValues);
   }
 
-  /// Displays the selection dialog containing the search bar and option list.
+  /// Displays the selection dropdown as an overlay.
   void _showDropdown() {
-    _searchController.clear();
-    _filteredOptions = _allOptions;
+    if (_isOpen) {
+      _overlayEntry?.remove();
+      _overlayEntry = null;
+      setState(() {
+        _isOpen = false;
+        _searchController.clear();
+        _filteredOptions = _allOptions;
+      });
+      return;
+    }
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final bool isAllSelected = _filteredOptions.isNotEmpty &&
-                _filteredOptions.every((item) => _selectedValues.contains(item.value));
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final availableHeightBelow = MediaQuery.of(context).size.height - offset.dy - size.height;
+    final dropdownHeight = widget.dropdownHeight;
 
-            return AlertDialog(
-              backgroundColor: widget.dropdownMenuColor ?? DialogThemeData().backgroundColor,
-              title: Text(widget.title, style: widget.dropDownTitleStyle),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    /// Search Bar Section
-                    Visibility(
-                        visible: widget.showSearch,
-                        child: Column(
-                          children: [
-                            TextField(
-                              controller: _searchController,
-                              decoration: widget.searchFieldDecoration ??
-                                  InputDecoration(
-                                    hintText: widget.searchHintText,
-                                    hintStyle: widget.searchHintTextStyle,
-                                    prefixIcon: const Icon(Icons.search),
-                                    suffixIcon: _searchController.text.isNotEmpty
-                                        ? IconButton(
-                                      icon: const Icon(Icons.clear_rounded),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        _filterSearch('');
-                                        setDialogState(() {});
-                                      },
-                                    )
-                                        : null,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                              onChanged: (val) {
-                                _filterSearch(val);
-                                setDialogState(() {});
-                              },
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                        )),
+    bool showAbove = availableHeightBelow < dropdownHeight &&
+        offset.dy > availableHeightBelow;
 
-                    /// Action Bar (Select All / Clear All)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: isAllSelected,
-                              activeColor: widget.selectedItemColor,
-                              onChanged: (val) {
-                                _handleSelectAll(val);
-                                setDialogState(() {});
-                              },
-                            ),
-                            Text("Select All", style: widget.selectAllTextStyle ?? const TextStyle(fontSize: 13)),
-                          ],
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() => _selectedValues.clear());
-                            widget.onSelectionChanged(_selectedValues);
-                            setDialogState(() {});
-                          },
-                          child: Text("Clear All", style: widget.clearAllTextStyle ?? const TextStyle(fontSize: 13)),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-
-                    /// Scrollable Options List
-                    Flexible(
-                      child: _filteredOptions.isNotEmpty
-                          ? ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _filteredOptions.length,
-                        itemBuilder: (context, index) {
-                          final item = _filteredOptions[index];
-                          final bool isSelected = _selectedValues.contains(item.value);
-
-                          return CheckboxListTile(
-                            title: Text(item.label, style: widget.listLabelTextStyle),
-                            value: isSelected,
-                            activeColor: widget.selectedItemColor,
-                            onChanged: (bool? checked) {
-                              if (checked == true) {
-                                if (widget.maxSelection != null && _selectedValues.length >= widget.maxSelection!) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text("Max ${widget.maxSelection} items allowed")),
-                                  );
-                                  return;
-                                }
-                                setState(() => _selectedValues.add(item.value));
+    _overlayEntry = OverlayEntry(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setOverlayState) {
+          return Stack(
+            children: [
+              GestureDetector(
+                onTap: _showDropdown,
+                behavior: HitTestBehavior.translucent,
+                child: Container(),
+              ),
+              Positioned(
+                width: size.width,
+                child: CompositedTransformFollower(
+                  link: _layerLink,
+                  showWhenUnlinked: false,
+                  targetAnchor:
+                      showAbove ? Alignment.topLeft : Alignment.bottomLeft,
+                  followerAnchor:
+                      showAbove ? Alignment.bottomLeft : Alignment.topLeft,
+                  offset: Offset(0, showAbove ? -10 : 10),
+                  child: DropDownWidget(
+                    listScrollController: _scrollController,
+                    separatorWidget : widget.separatorWidget,
+                    doneTextStyle: widget.doneTextStyle,
+                    onDone: _showDropdown,
+                    searchHintText: widget.searchHintText,
+                    isSingleSelect: widget.isSingleSelect,
+                    listLabelTextStyle: widget.listLabelTextStyle,
+                    selectedItemColor: widget.selectedItemColor,
+                    noResultText: widget.noResultText,
+                    noResultTextStyle: widget.noResultTextStyle,
+                    noSearchIconColor: widget.noSearchIconColor,
+                    noSearchIconSize: widget.noSearchIconSize,
+                    dropdownHeight: widget.dropdownHeight,
+                    itemList: _filteredOptions,
+                    selectedValues: _selectedValues,
+                    selectClearAllPadding: widget.selectClearAllPadding,
+                    searchHintTextStyle: widget.searchHintTextStyle,
+                    width: size.width,
+                    searchController: _searchController,
+                    showSearch: widget.showSearch,
+                    clearAllTextStyle: widget.clearAllTextStyle,
+                    selectAllTextStyle: widget.selectAllTextStyle,
+                    onSearchChange: (value) {
+                      if (_debounce?.isActive ?? false) _debounce!.cancel();
+                      _debounce = Timer(const Duration(milliseconds: 300), () {
+                        setOverlayState(() {
+                          _filterSearch(value);
+                        });
+                      });
+                    },
+                    onClearSearchIcon: () {
+                      setOverlayState(() {
+                        _searchController.clear();
+                        _filterSearch('');
+                      });
+                    },
+                    onItemTap: (value) {
+                      setOverlayState(() {
+                        if (widget.isSingleSelect) {
+                          _selectedValues = [value];
+                          _showDropdown(); // Close dropdown on selection
+                        } else {
+                          if (_selectedValues.contains(value)) {
+                            _selectedValues.remove(value);
+                          } else {
+                            if (widget.maxSelection == null ||
+                                _selectedValues.length <
+                                    widget.maxSelection!) {
+                              _selectedValues.add(value);
+                            } else {
+                              if (widget.onMaxSelectionLimitReached != null) {
+                                widget.onMaxSelectionLimitReached!();
                               } else {
-                                setState(() => _selectedValues.remove(item.value));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor:
+                                        widget.snackBarBackgroundColor ??
+                                            Colors.grey,
+                                    content: Text(
+                                        "You can only select ${widget.maxSelection} items",
+                                        style: widget
+                                            .maxSelectionSnackBarTextStyle),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
                               }
-                              widget.onSelectionChanged(_selectedValues);
-                              setDialogState(() {});
-                            },
-                          );
-                        },
-                      )
-                          : Padding(
-                        padding: const EdgeInsets.all(10.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.search_off,
-                                color: widget.noSearchIconColor ?? Colors.black,
-                                size: widget.noSearchIconSize ?? 40),
-                            const SizedBox(height: 8),
-                            Text(
-                              widget.noResultText,
-                              style: widget.noResultTextStyle ?? const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                            }
+                          }
+                        }
+                        widget.onSelectionChanged(_selectedValues);
+                      });
+                      setState(() {}); // Update the main field chips
+                    },
+                    onSelectAll: (checked) {
+                      setOverlayState(() {
+                        _handleSelectAll(checked);
+                      });
+                      setState(() {});
+                    },
+                    onClearAll: () {
+                      setOverlayState(() {
+                        _selectedValues.clear();
+                        widget.onSelectionChanged(_selectedValues);
+                      });
+                      setState(() {});
+                    },
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text("Done", style: widget.doneTextStyle),
-                ),
-              ],
-            );
-          },
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
+
+    Overlay.of(context).insert(_overlayEntry!);
+    setState(() {
+      _isOpen = true;
+    });
   }
 
   @override
@@ -347,8 +396,10 @@ class _MultiSelectDropdownState<T> extends State<MultiSelectDropdown<T>> {
       children: [
         Text(widget.labelText, style: widget.labelTextStyle ?? const TextStyle(fontWeight: FontWeight.bold)),
         SizedBox(height: widget.spaceBtLabelAndField),
-        GestureDetector(
-          onTap: _showDropdown,
+        CompositedTransformTarget(
+          link: _layerLink,
+          child: GestureDetector(
+            onTap: _showDropdown,
           child: Container(
             padding: widget.searchFieldPadding ?? const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: widget.inputFieldDecoration ??
@@ -362,33 +413,38 @@ class _MultiSelectDropdownState<T> extends State<MultiSelectDropdown<T>> {
                 Expanded(
                   child: _selectedValues.isEmpty
                       ? Text(widget.hintText, style: widget.hintTextStyle)
-                      : Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: _allOptions
-                        .where((item) => _selectedValues.contains(item.value))
-                        .map(
-                          (item) => Chip(
-                        label: Text(item.label, style: widget.chipTextStyle ?? const TextStyle(fontSize: 12)),
-                        backgroundColor: widget.chipColor ?? (widget.selectedItemColor ?? Theme.of(context).primaryColor).withAlpha(50),
-                        deleteIcon: const Icon(Icons.close, size: 14),
-                        onDeleted: () {
-                          setState(() {
-                            _selectedValues.remove(item.value);
-                            widget.onSelectionChanged(_selectedValues);
-                          });
-                        },
-                      ),
-                    )
-                        .toList(),
-                  ),
+                      : widget.isSingleSelect
+                          ? Text(
+                              _allOptions.firstWhere((item) => _selectedValues.contains(item.value)).label,
+                              style: widget.chipTextStyle,
+                            )
+                          : Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: _allOptions
+                                  .where((item) => _selectedValues.contains(item.value))
+                                  .map(
+                                    (item) => Chip(
+                                      label: Text(item.label, style: widget.chipTextStyle ?? const TextStyle(fontSize: 12)),
+                                      backgroundColor: widget.chipColor ?? (widget.selectedItemColor ?? Theme.of(context).primaryColor).withAlpha(50),
+                                      deleteIcon: const Icon(Icons.close, size: 14),
+                                      onDeleted: () {
+                                        setState(() {
+                                          _selectedValues.remove(item.value);
+                                          widget.onSelectionChanged(_selectedValues);
+                                        });
+                                      },
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
                 ),
                 widget.dropDownIcon ?? const Icon(Icons.arrow_drop_down),
               ],
             ),
           ),
         ),
-      ],
+        )],
     );
   }
 }
